@@ -270,11 +270,9 @@ func (c *CloudwatchLogsReader) Error() error {
 }
 
 func streamsToNames(streams []*cloudwatchlogs.LogStream) []*string {
-	fmt.Println(streams)
 	names := make([]*string, 0, len(streams))
 	for _, s := range streams {
 		names = append(names, s.LogStreamName)
 	}
-	fmt.Println(names)
 	return names
 }
