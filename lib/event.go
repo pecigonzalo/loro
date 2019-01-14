@@ -3,7 +3,6 @@ package lib
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/aws/aws-sdk-go/service/cloudwatchlogs"
@@ -23,7 +22,8 @@ type Event struct {
 func NewEvent(cwEvent cloudwatchlogs.FilteredLogEvent, group string) Event {
 	var ecsLogsEvent map[string]interface{}
 	if err := json.Unmarshal([]byte(*cwEvent.Message), &ecsLogsEvent); err != nil {
-		fmt.Fprintf(os.Stdout, "Error unmarshalling event")
+		ecsLogsEvent = make(map[string]interface{})
+		ecsLogsEvent["message"] = *cwEvent.Message
 	}
 
 	return Event{
