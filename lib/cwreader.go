@@ -10,7 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/cloudwatchlogs"
-	"github.com/hashicorp/golang-lru"
+	lru "github.com/hashicorp/golang-lru"
 )
 
 const (
@@ -150,9 +150,9 @@ func (c *CloudwatchLogsReader) getLogStreams() ([]*cloudwatchlogs.LogStream, err
 			if len(streams) >= MaxStreams {
 				return false
 			}
-			if s.LastEventTimestamp == nil {
+			if s.LastIngestionTime == nil {
 				// treat nil timestamps as 0
-				s.LastEventTimestamp = aws.Int64(0)
+				s.LastIngestionTime = aws.Int64(0)
 			}
 
 			// if we are sorting by time, we can do some shortcuts to end
@@ -162,7 +162,7 @@ func (c *CloudwatchLogsReader) getLogStreams() ([]*cloudwatchlogs.LogStream, err
 				if s.CreationTime != nil && *s.CreationTime > endTimestamp {
 					continue
 				}
-				if *s.LastEventTimestamp < startTimestamp {
+				if *s.LastIngestionTime < startTimestamp {
 					pastWindow = true
 					break
 				}
@@ -172,7 +172,7 @@ func (c *CloudwatchLogsReader) getLogStreams() ([]*cloudwatchlogs.LogStream, err
 				// otherwise we have to check all pages, but there are fewer because
 				// we are prefix matching
 				if s.CreationTime != nil && *s.CreationTime < endTimestamp &&
-					*s.LastEventTimestamp > startTimestamp {
+					*s.LastIngestionTime > startTimestamp {
 					streams = append(streams, s)
 				}
 			}
@@ -187,7 +187,7 @@ func (c *CloudwatchLogsReader) getLogStreams() ([]*cloudwatchlogs.LogStream, err
 	}); err != nil {
 		return nil, err
 	}
-	sort.Slice(streams[:], func(i, j int) bool { return *streams[i].LastEventTimestamp > *streams[j].LastEventTimestamp })
+	sort.Slice(streams[:], func(i, j int) bool { return *streams[i].LastIngestionTime > *streams[j].LastIngestionTime })
 	if len(streams) == 0 {
 		if c.streamPrefix != "" {
 			return nil, fmt.Errorf("No log streams found matching task prefix '%s' in your time window.  Consider adjusting your time window with --since and/or --until", c.streamPrefix)
@@ -270,11 +270,9 @@ func (c *CloudwatchLogsReader) Error() error {
 }
 
 func streamsToNames(streams []*cloudwatchlogs.LogStream) []*string {
-	fmt.Println(streams)
 	names := make([]*string, 0, len(streams))
 	for _, s := range streams {
 		names = append(names, s.LogStreamName)
 	}
-	fmt.Println(names)
 	return names
 }

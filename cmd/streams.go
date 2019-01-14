@@ -50,7 +50,7 @@ func streams(cmd *cobra.Command, args []string) error {
 	}
 
 	sort.Slice(streams, func(i, j int) bool {
-		return *streams[i].LastEventTimestamp > *streams[j].LastEventTimestamp
+		return *streams[i].LastIngestionTime > *streams[j].LastIngestionTime
 	})
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 8, 2, '\t', 0)
@@ -59,7 +59,7 @@ func streams(cmd *cobra.Command, args []string) error {
 	for _, stream := range streams {
 		fmt.Fprintf(w, "%s\t%s\t%s\n",
 			*stream.LogStreamName,
-			lib.ParseAWSTimestamp(stream.LastEventTimestamp).Local().Format(lib.ShortTimeFormat),
+			lib.ParseAWSTimestamp(stream.LastIngestionTime).Local().Format(lib.ShortTimeFormat),
 			lib.ParseAWSTimestamp(stream.CreationTime).Local().Format(lib.ShortTimeFormat),
 		)
 	}
