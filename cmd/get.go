@@ -10,6 +10,7 @@ import (
 
 	"github.com/pecigonzalo/loro/lib"
 	"github.com/segmentio/events"
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
@@ -64,17 +65,20 @@ func get(cmd *cobra.Command, args []string) error {
 
 	start, err := lib.GetTime(since, time.Now())
 	if err != nil {
-		return fmt.Errorf("Failed to parse time '%s'", since)
+		log.Errorf("Failed to parse time '%s'", since)
+		return err
 	}
 
 	var end time.Time
 	if cmd.Flags().Lookup("until").Changed {
 		if cmd.Flags().Lookup("follow").Changed {
-			return fmt.Errorf("Can't set both --until and --follow")
+			log.Errorf("Can't set both --until and --follow")
+			return err
 		}
 		end, err = lib.GetTime(until, time.Now())
 		if err != nil {
-			return fmt.Errorf("Failed to parse time '%s'", until)
+			log.Errorf("Failed to parse time '%s'", until)
+			return err
 		}
 	}
 
@@ -116,7 +120,7 @@ ReadLoop:
 
 			err = output.Execute(os.Stdout, event)
 			if err != nil {
-				fmt.Fprintf(os.Stdout, err.Error())
+				log.Errorf(err.Error())
 				return err
 			}
 
@@ -125,7 +129,7 @@ ReadLoop:
 			ticker = time.After(7 * time.Second)
 		case <-ticker:
 			if !follow {
-				fmt.Fprintf(os.Stdout, "logs are taking a while to load... possibly try a smaller time window")
+				log.Info("logs are taking a while to load... possibly try a smaller time window")
 			}
 		}
 	}
@@ -134,10 +138,9 @@ ReadLoop:
 		if err == context.Canceled {
 			return nil
 		}
-
-		return err
+		log.Errorf(err.Error())
+		os.Exit(-1)
 	}
-
 	return nil
 
 }

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/pecigonzalo/loro/lib"
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
@@ -31,12 +32,14 @@ func streams(cmd *cobra.Command, args []string) error {
 
 	start, err := lib.GetTime(since, time.Now())
 	if err != nil {
-		return fmt.Errorf("Failed to parse time '%s'", since)
+		log.Errorf("Failed to parse time '%s'", since)
+		return err
 	}
 
 	end, err := lib.GetTime(until, time.Now())
 	if err != nil {
-		return fmt.Errorf("Failed to parse time '%s'", until)
+		log.Errorf("Failed to parse time '%s'", since)
+		return err
 	}
 
 	logReader, err := lib.NewCloudwatchLogsReader(group, prefix, start, end)
