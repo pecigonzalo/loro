@@ -2,24 +2,37 @@ name: Go
 
 on:
   push:
+    tags:
+      - '*'
     branches: [ main ]
   pull_request:
     branches: [ main ]
 
-jobs:
+permissions:
+  contents: write
 
-  build:
+jobs:
+  goreleaser:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
 
-    - name: Set up Go
-      uses: actions/setup-go@v2
-      with:
-        go-version: 1.16
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.16
 
-    - name: Build
-      run: go build -v ./...
+      - name: Test
+        run: go test -v ./...
 
-    - name: Test
-      run: go test -v ./...
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          version: latest
+          args: release --rm-dist
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
