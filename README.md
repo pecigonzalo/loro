@@ -1,6 +1,4 @@
-# loro
-
-## Loro Only Repeats Output
+# loro (Loro Only Repeats Output)
 
 ![loro](https://media.giphy.com/media/5PSPV1ucLX31u/giphy-downsized.gif)
 
