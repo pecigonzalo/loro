@@ -58,7 +58,7 @@ loro list groups /streamgroup/partialname
 
 All commands contain help documentation by using `--help` flag
 
-```bash
+```
 > loro get --help
 Get logs from a group or stream
 
