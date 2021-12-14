@@ -10,7 +10,7 @@ require (
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/mattn/go-colorable v0.0.9 // indirect
 	github.com/mattn/go-isatty v0.0.4 // indirect
-	github.com/mitchellh/go-homedir v1.0.0
+	github.com/mitchellh/go-homedir v1.1.0
 	github.com/pecigonzalo/loro v0.0.0-20190114225731-87642e962926
 	github.com/segmentio/events v2.1.0+incompatible
 	github.com/spf13/afero v1.2.0 // indirect
