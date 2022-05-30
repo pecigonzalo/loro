@@ -10,5 +10,5 @@ require (
 	github.com/pecigonzalo/loro v0.0.0-20190114225731-87642e962926
 	github.com/segmentio/events v2.1.0+incompatible
 	github.com/spf13/cobra v1.3.0
-	github.com/spf13/viper v1.10.0
+	github.com/spf13/viper v1.12.0
 )
