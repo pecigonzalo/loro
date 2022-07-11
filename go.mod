@@ -3,7 +3,7 @@ module pecigonzalo/loro
 go 1.16
 
 require (
-	github.com/aws/aws-sdk-go v1.42.52
+	github.com/aws/aws-sdk-go v1.44.51
 	github.com/fatih/color v1.13.0
 	github.com/hashicorp/golang-lru v0.5.4
 	github.com/mitchellh/go-homedir v1.1.0
