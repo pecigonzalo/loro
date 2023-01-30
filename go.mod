@@ -4,7 +4,7 @@ go 1.16
 
 require (
 	github.com/aws/aws-sdk-go v1.42.52
-	github.com/fatih/color v1.13.0
+	github.com/fatih/color v1.14.1
 	github.com/hashicorp/golang-lru v0.5.4
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/pecigonzalo/loro v0.0.0-20190114225731-87642e962926
