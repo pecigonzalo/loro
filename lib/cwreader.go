@@ -34,7 +34,6 @@ type CloudwatchLogsReader struct {
 	end          time.Time
 	error        error
 	streamPrefix string
-	streamNames  string
 }
 
 // SetMaxStreams sets the maximum number of streams for describe/filter calls
@@ -109,7 +108,7 @@ func getLogGroup(ctx context.Context, svc *cloudwatchlogs.Client, name string) (
 	}
 
 	if len(groups) == 0 {
-		return types.LogGroup{}, fmt.Errorf("Could not find log group '%s'", name)
+		return types.LogGroup{}, fmt.Errorf("could not find log group '%s'", name)
 	}
 
 	if *groups[0].LogGroupName != name {
@@ -199,10 +198,10 @@ func (c *CloudwatchLogsReader) getLogStreams(ctx context.Context) ([]types.LogSt
 	sort.Slice(streams[:], func(i, j int) bool { return *streams[i].LastIngestionTime > *streams[j].LastIngestionTime })
 	if len(streams) == 0 {
 		if c.streamPrefix != "" {
-			return nil, fmt.Errorf("No log streams found matching task prefix '%s' in your time window.  Consider adjusting your time window with --since and/or --until", c.streamPrefix)
+			return nil, fmt.Errorf("no log streams found matching task prefix '%s' in your time window.  Consider adjusting your time window with --since and/or --until", c.streamPrefix)
 		}
 
-		return nil, errors.New("No log streams found in your time window.  Consider adjusting your time window with --since and/or --until")
+		return nil, errors.New("no log streams found in your time window.  Consider adjusting your time window with --since and/or --until")
 
 	}
 	return streams, nil

@@ -39,10 +39,7 @@ func GetTime(value string, reference time.Time) (time.Time, error) {
 	}
 
 	var format string
-	var parseInLocation bool
-
-	// if the string has a Z or a + or three dashes use parse otherwise use parseinlocation
-	parseInLocation = !(strings.ContainsAny(value, "zZ+") || strings.Count(value, "-") == 3)
+	var parseInLocation = !strings.ContainsAny(value, "zZ+") && strings.Count(value, "-") != 3
 
 	if strings.Contains(value, ".") {
 		if parseInLocation {

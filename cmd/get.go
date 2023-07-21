@@ -40,7 +40,6 @@ var (
 	follow        bool
 	prefix        string
 	eventTemplate string
-	verbose       bool
 	raw           bool
 )
 
@@ -65,17 +64,17 @@ func get(cmd *cobra.Command, args []string) error {
 
 	start, err := lib.GetTime(since, time.Now())
 	if err != nil {
-		return fmt.Errorf("Failed to parse time '%s'", since)
+		return fmt.Errorf("failed to parse time '%s'", since)
 	}
 
 	var end time.Time
 	if cmd.Flags().Lookup("until").Changed {
 		if cmd.Flags().Lookup("follow").Changed {
-			return fmt.Errorf("Can't set both --until and --follow")
+			return fmt.Errorf("can't set both --until and --follow")
 		}
 		end, err = lib.GetTime(until, time.Now())
 		if err != nil {
-			return fmt.Errorf("Failed to parse time '%s'", until)
+			return fmt.Errorf("failed to parse time '%s'", until)
 		}
 	}
 
@@ -117,7 +116,7 @@ ReadLoop:
 
 			err = output.Execute(os.Stdout, event)
 			if err != nil {
-				fmt.Fprintf(os.Stdout, err.Error())
+				fmt.Fprint(os.Stdout, err.Error())
 				return err
 			}
 
