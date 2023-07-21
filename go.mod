@@ -9,7 +9,7 @@ require (
 	github.com/fatih/color v1.15.0
 	github.com/hashicorp/golang-lru/v2 v2.0.4
 	github.com/mitchellh/go-homedir v1.1.0
-	github.com/segmentio/events v2.1.0+incompatible
+	github.com/segmentio/events/v2 v2.5.1
 	github.com/spf13/cobra v1.7.0
 	github.com/spf13/viper v1.16.0
 )
