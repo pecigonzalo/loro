@@ -56,6 +56,7 @@ func init() {
 }
 
 func get(cmd *cobra.Command, args []string) error {
+	ctx := context.Background()
 	group := "/"
 
 	if len(args) > 0 {
@@ -86,7 +87,7 @@ func get(cmd *cobra.Command, args []string) error {
 	}
 
 	// Try and fetch the group to verify it exists
-	_, err = logReader.GetGroup()
+	_, err = logReader.GetGroup(ctx)
 	if err != nil {
 		return err
 	}

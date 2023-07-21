@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"text/tabwriter"
@@ -24,6 +25,7 @@ func init() {
 }
 
 func groups(cmd *cobra.Command, args []string) error {
+	ctx := context.Background()
 	group := "/"
 
 	if len(args) > 0 {
@@ -45,7 +47,7 @@ func groups(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	groups, err := logReader.ListGroups()
+	groups, err := logReader.ListGroups(ctx)
 	if err != nil {
 		return err
 	}
