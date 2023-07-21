@@ -7,10 +7,11 @@ import (
 	"sort"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/cloudwatchlogs"
-	lru "github.com/hashicorp/golang-lru"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
+	lru "github.com/hashicorp/golang-lru/v2"
 )
 
 const (
@@ -27,8 +28,8 @@ var (
 // group
 type CloudwatchLogsReader struct {
 	logGroupName string
-	svc          *cloudwatchlogs.CloudWatchLogs
-	eventCache   *lru.Cache
+	svc          *cloudwatchlogs.Client
+	eventCache   *lru.Cache[string, any]
 	start        time.Time
 	end          time.Time
 	error        error
@@ -44,10 +45,17 @@ func SetMaxStreams(max int) {
 // NewCloudwatchLogsReader takes a group and optionally a stream prefix, start and
 // end time, and returns a reader for any logs that match those parameters.
 func NewCloudwatchLogsReader(group string, streamPrefix string, start time.Time, end time.Time) (*CloudwatchLogsReader, error) {
-	session := session.New()
-	svc := cloudwatchlogs.New(session, &aws.Config{MaxRetries: aws.Int(10)})
+	cfg, err := config.LoadDefaultConfig(context.Background())
+	if err != nil {
+		return nil, err
+	}
 
-	cache, err := lru.New(MaxEventsPerCall)
+	// Extend default retry count to 10
+	cfg.RetryMaxAttempts = 10
+
+	svc := cloudwatchlogs.NewFromConfig(cfg)
+
+	cache, err := lru.New[string, any](MaxEventsPerCall)
 	if err != nil {
 		return nil, err
 	}
@@ -65,16 +73,16 @@ func NewCloudwatchLogsReader(group string, streamPrefix string, start time.Time,
 }
 
 // ListGroups returns a list of possible groups given a group name
-func (c *CloudwatchLogsReader) ListGroups() ([]*cloudwatchlogs.LogGroup, error) {
-	return getLogGroups(c.svc, c.logGroupName)
+func (c *CloudwatchLogsReader) ListGroups(ctx context.Context) ([]types.LogGroup, error) {
+	return getLogGroups(ctx, c.svc, c.logGroupName)
 }
 
-func getLogGroups(svc *cloudwatchlogs.CloudWatchLogs, name string) ([]*cloudwatchlogs.LogGroup, error) {
+func getLogGroups(ctx context.Context, svc *cloudwatchlogs.Client, name string) ([]types.LogGroup, error) {
 	describeLogGroupsInput := &cloudwatchlogs.DescribeLogGroupsInput{
 		LogGroupNamePrefix: aws.String(name),
 	}
 
-	resp, err := svc.DescribeLogGroups(describeLogGroupsInput)
+	resp, err := svc.DescribeLogGroups(ctx, describeLogGroupsInput)
 	if err != nil {
 		return nil, err
 	}
@@ -82,18 +90,18 @@ func getLogGroups(svc *cloudwatchlogs.CloudWatchLogs, name string) ([]*cloudwatc
 }
 
 // GetGroup returns a selected group given a group name
-func (c *CloudwatchLogsReader) GetGroup() (*cloudwatchlogs.LogGroup, error) {
-	return getLogGroup(c.svc, c.logGroupName)
+func (c *CloudwatchLogsReader) GetGroup(ctx context.Context) (types.LogGroup, error) {
+	return getLogGroup(ctx, c.svc, c.logGroupName)
 }
 
-func getLogGroup(svc *cloudwatchlogs.CloudWatchLogs, name string) (*cloudwatchlogs.LogGroup, error) {
-	groups, err := getLogGroups(svc, name)
+func getLogGroup(ctx context.Context, svc *cloudwatchlogs.Client, name string) (types.LogGroup, error) {
+	groups, err := getLogGroups(ctx, svc, name)
 	if err != nil {
-		return nil, err
+		return types.LogGroup{}, err
 	}
 
 	if len(groups) == 0 {
-		return nil, fmt.Errorf("Could not find log group '%s'", name)
+		return types.LogGroup{}, fmt.Errorf("Could not find log group '%s'", name)
 	}
 
 	if *groups[0].LogGroupName != name {
@@ -105,7 +113,7 @@ func getLogGroup(svc *cloudwatchlogs.CloudWatchLogs, name string) (*cloudwatchlo
 			}
 			errMsg += fmt.Sprintf("%s\n", *group.LogGroupName)
 		}
-		return nil, errors.New(errMsg)
+		return types.LogGroup{}, errors.New(errMsg)
 	}
 
 	return groups[0], nil
@@ -113,15 +121,15 @@ func getLogGroup(svc *cloudwatchlogs.CloudWatchLogs, name string) (*cloudwatchlo
 
 // ListStreams returns any log streams that match the params given in the
 // reader's constructor.  Will return at most `MaxStreams` streams
-func (c *CloudwatchLogsReader) ListStreams() ([]*cloudwatchlogs.LogStream, error) {
-	_, err := getLogGroup(c.svc, c.logGroupName)
+func (c *CloudwatchLogsReader) ListStreams(ctx context.Context) ([]types.LogStream, error) {
+	_, err := getLogGroup(ctx, c.svc, c.logGroupName)
 	if err != nil {
 		return nil, err
 	}
-	return c.getLogStreams()
+	return c.getLogStreams(ctx)
 }
 
-func (c *CloudwatchLogsReader) getLogStreams() ([]*cloudwatchlogs.LogStream, error) {
+func (c *CloudwatchLogsReader) getLogStreams(ctx context.Context) ([]types.LogStream, error) {
 	params := &cloudwatchlogs.DescribeLogStreamsInput{
 		LogGroupName: aws.String(c.logGroupName),
 	}
@@ -132,7 +140,7 @@ func (c *CloudwatchLogsReader) getLogStreams() ([]*cloudwatchlogs.LogStream, err
 		params.LogStreamNamePrefix = aws.String(c.streamPrefix)
 	} else {
 		// If not, just give us the most recently active
-		params.OrderBy = aws.String("LastEventTime")
+		params.OrderBy = "LastEventTime"
 		params.Descending = aws.Bool(true)
 		sortByTime = true
 	}
@@ -143,50 +151,41 @@ func (c *CloudwatchLogsReader) getLogStreams() ([]*cloudwatchlogs.LogStream, err
 		endTimestamp = c.end.Unix() * 1e3
 	}
 
-	streams := []*cloudwatchlogs.LogStream{}
-	if err := c.svc.DescribeLogStreamsPages(params, func(o *cloudwatchlogs.DescribeLogStreamsOutput, lastPage bool) bool {
-		pastWindow := false
-		for _, s := range o.LogStreams {
-			if len(streams) >= MaxStreams {
-				return false
-			}
-			if s.LastIngestionTime == nil {
-				// treat nil timestamps as 0
-				s.LastIngestionTime = aws.Int64(0)
-			}
+	streams := []types.LogStream{}
 
-			// if we are sorting by time, we can do some shortcuts to end
-			// paging early if we are no longer in our time window
-			if sortByTime {
-
-				if s.CreationTime != nil && *s.CreationTime > endTimestamp {
-					continue
-				}
-				if *s.LastIngestionTime < startTimestamp {
-					pastWindow = true
-					break
-				}
-				streams = append(streams, s)
-
-			} else {
-				// otherwise we have to check all pages, but there are fewer because
-				// we are prefix matching
-				if s.CreationTime != nil && *s.CreationTime < endTimestamp &&
-					*s.LastIngestionTime > startTimestamp {
-					streams = append(streams, s)
-				}
-			}
-		}
-
-		// If we've iterated past our time window and are sorting by time, stop paging
-		if pastWindow && sortByTime {
-			return false
-		}
-
-		return !lastPage
-	}); err != nil {
+	streamOutput, err := c.svc.DescribeLogStreams(ctx, params)
+	if err != nil {
 		return nil, err
 	}
+
+	for _, s := range streamOutput.LogStreams {
+		if len(streams) >= MaxStreams {
+			return streams, nil
+		}
+		if s.LastIngestionTime == nil {
+			// treat nil timestamps as 0
+			s.LastIngestionTime = aws.Int64(0)
+		}
+		// if we are sorting by time, we can do some shortcuts to end
+		// paging early if we are no longer in our time window
+		if sortByTime {
+			if s.CreationTime != nil && *s.CreationTime > endTimestamp {
+				continue
+			}
+			if *s.LastIngestionTime < startTimestamp {
+				break
+			}
+			streams = append(streams, s)
+		} else {
+			// otherwise we have to check all pages, but there are fewer because
+			// we are prefix matching
+			if s.CreationTime != nil && *s.CreationTime < endTimestamp &&
+				*s.LastIngestionTime > startTimestamp {
+				streams = append(streams, s)
+			}
+		}
+	}
+
 	sort.Slice(streams[:], func(i, j int) bool { return *streams[i].LastIngestionTime > *streams[j].LastIngestionTime })
 	if len(streams) == 0 {
 		if c.streamPrefix != "" {
@@ -229,7 +228,7 @@ func (c *CloudwatchLogsReader) pumpEvents(ctx context.Context, eventChan chan<- 
 	}
 
 	if c.streamPrefix != "" {
-		streams, err := c.getLogStreams()
+		streams, err := c.getLogStreams(ctx)
 		if err != nil {
 			c.error = err
 			close(eventChan)
@@ -239,7 +238,7 @@ func (c *CloudwatchLogsReader) pumpEvents(ctx context.Context, eventChan chan<- 
 	}
 
 	for {
-		o, err := c.svc.FilterLogEventsWithContext(ctx, params)
+		o, err := c.svc.FilterLogEvents(ctx, params)
 		if err != nil {
 			c.error = err
 			close(eventChan)
@@ -248,7 +247,7 @@ func (c *CloudwatchLogsReader) pumpEvents(ctx context.Context, eventChan chan<- 
 
 		for _, event := range o.Events {
 			if _, ok := c.eventCache.Peek(*event.EventId); !ok {
-				eventChan <- NewEvent(*event, c.logGroupName)
+				eventChan <- NewEvent(event, c.logGroupName)
 				c.eventCache.Add(*event.EventId, nil)
 			}
 		}
@@ -269,10 +268,10 @@ func (c *CloudwatchLogsReader) Error() error {
 	return c.error
 }
 
-func streamsToNames(streams []*cloudwatchlogs.LogStream) []*string {
-	names := make([]*string, 0, len(streams))
+func streamsToNames(streams []types.LogStream) []string {
+	names := make([]string, 0, len(streams))
 	for _, s := range streams {
-		names = append(names, s.LogStreamName)
+		names = append(names, *s.LogStreamName)
 	}
 	return names
 }

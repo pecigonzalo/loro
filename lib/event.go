@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/aws/aws-sdk-go/service/cloudwatchlogs"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
 )
 
 // Event represents a log event
@@ -19,7 +19,7 @@ type Event struct {
 }
 
 // NewEvent takes a cloudwatch log event and returns an Event
-func NewEvent(cwEvent cloudwatchlogs.FilteredLogEvent, group string) Event {
+func NewEvent(cwEvent types.FilteredLogEvent, group string) Event {
 	var ecsLogsEvent map[string]interface{}
 	if err := json.Unmarshal([]byte(*cwEvent.Message), &ecsLogsEvent); err != nil {
 		ecsLogsEvent = make(map[string]interface{})

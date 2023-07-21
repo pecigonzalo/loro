@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"sort"
@@ -23,6 +24,7 @@ func init() {
 }
 
 func streams(cmd *cobra.Command, args []string) error {
+	ctx := context.Background()
 	group := "/"
 
 	if len(args) > 0 {
@@ -44,7 +46,7 @@ func streams(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	streams, err := logReader.ListStreams()
+	streams, err := logReader.ListStreams(ctx)
 	if err != nil {
 		return err
 	}
