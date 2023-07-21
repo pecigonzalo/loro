@@ -33,12 +33,12 @@ func streams(cmd *cobra.Command, args []string) error {
 
 	start, err := lib.GetTime(since, time.Now())
 	if err != nil {
-		return fmt.Errorf("Failed to parse time '%s'", since)
+		return fmt.Errorf("failed to parse time '%s'", since)
 	}
 
 	end, err := lib.GetTime(until, time.Now())
 	if err != nil {
-		return fmt.Errorf("Failed to parse time '%s'", until)
+		return fmt.Errorf("failed to parse time '%s'", until)
 	}
 
 	logReader, err := lib.NewCloudwatchLogsReader(group, prefix, start, end)
