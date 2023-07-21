@@ -29,7 +29,7 @@ var (
 type CloudwatchLogsReader struct {
 	logGroupName string
 	svc          *cloudwatchlogs.Client
-	eventCache   *lru.Cache
+	eventCache   *lru.Cache[string, any]
 	start        time.Time
 	end          time.Time
 	error        error
@@ -55,7 +55,7 @@ func NewCloudwatchLogsReader(group string, streamPrefix string, start time.Time,
 
 	svc := cloudwatchlogs.NewFromConfig(cfg)
 
-	cache, err := lru.New(MaxEventsPerCall)
+	cache, err := lru.New[string, any](MaxEventsPerCall)
 	if err != nil {
 		return nil, err
 	}
