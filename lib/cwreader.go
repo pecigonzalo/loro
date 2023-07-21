@@ -82,11 +82,19 @@ func getLogGroups(ctx context.Context, svc *cloudwatchlogs.Client, name string) 
 		LogGroupNamePrefix: aws.String(name),
 	}
 
-	resp, err := svc.DescribeLogGroups(ctx, describeLogGroupsInput)
-	if err != nil {
-		return nil, err
+	paginator := cloudwatchlogs.NewDescribeLogGroupsPaginator(svc, describeLogGroupsInput)
+
+	// Paginate through all of the log groups
+	groups := []types.LogGroup{}
+	for paginator.HasMorePages() {
+		if page, err := paginator.NextPage(ctx); err != nil {
+			return groups, err
+		} else {
+			groups = append(groups, page.LogGroups...)
+		}
 	}
-	return resp.LogGroups, nil
+
+	return groups, nil
 }
 
 // GetGroup returns a selected group given a group name
@@ -140,7 +148,7 @@ func (c *CloudwatchLogsReader) getLogStreams(ctx context.Context) ([]types.LogSt
 		params.LogStreamNamePrefix = aws.String(c.streamPrefix)
 	} else {
 		// If not, just give us the most recently active
-		params.OrderBy = "LastEventTime"
+		params.OrderBy = types.OrderByLastEventTime
 		params.Descending = aws.Bool(true)
 		sortByTime = true
 	}
@@ -151,37 +159,39 @@ func (c *CloudwatchLogsReader) getLogStreams(ctx context.Context) ([]types.LogSt
 		endTimestamp = c.end.Unix() * 1e3
 	}
 
+	paginator := cloudwatchlogs.NewDescribeLogStreamsPaginator(c.svc, params)
+
+	// Paginate through all of the log streams
 	streams := []types.LogStream{}
-
-	streamOutput, err := c.svc.DescribeLogStreams(ctx, params)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, s := range streamOutput.LogStreams {
-		if len(streams) >= MaxStreams {
-			return streams, nil
-		}
-		if s.LastIngestionTime == nil {
-			// treat nil timestamps as 0
-			s.LastIngestionTime = aws.Int64(0)
-		}
-		// if we are sorting by time, we can do some shortcuts to end
-		// paging early if we are no longer in our time window
-		if sortByTime {
-			if s.CreationTime != nil && *s.CreationTime > endTimestamp {
-				continue
-			}
-			if *s.LastIngestionTime < startTimestamp {
-				break
-			}
-			streams = append(streams, s)
+	for paginator.HasMorePages() {
+		if page, err := paginator.NextPage(ctx); err != nil {
+			return streams, err
 		} else {
-			// otherwise we have to check all pages, but there are fewer because
-			// we are prefix matching
-			if s.CreationTime != nil && *s.CreationTime < endTimestamp &&
-				*s.LastIngestionTime > startTimestamp {
-				streams = append(streams, s)
+			for _, s := range page.LogStreams {
+				if len(streams) >= MaxStreams {
+					return streams, nil
+				}
+				if s.LastIngestionTime == nil {
+					// treat nil timestamps as 0
+					s.LastIngestionTime = aws.Int64(0)
+				}
+				// if we are sorting by time, we can do some shortcuts to end
+				// paging early if we are no longer in our time window
+				if sortByTime {
+					if s.CreationTime != nil && *s.CreationTime > endTimestamp {
+						continue
+					}
+					if *s.LastIngestionTime < startTimestamp {
+						return streams, nil
+					}
+					streams = append(streams, s)
+				} else {
+					// else we are searching by prefix, so we need to do a full
+					if s.CreationTime != nil && *s.CreationTime < endTimestamp &&
+						*s.LastIngestionTime > startTimestamp {
+						streams = append(streams, s)
+					}
+				}
 			}
 		}
 	}
@@ -238,27 +248,29 @@ func (c *CloudwatchLogsReader) pumpEvents(ctx context.Context, eventChan chan<- 
 	}
 
 	for {
-		o, err := c.svc.FilterLogEvents(ctx, params)
-		if err != nil {
-			c.error = err
-			close(eventChan)
-			return
-		}
-
-		for _, event := range o.Events {
-			if _, ok := c.eventCache.Peek(*event.EventId); !ok {
-				eventChan <- NewEvent(event, c.logGroupName)
-				c.eventCache.Add(*event.EventId, nil)
+		paginator := cloudwatchlogs.NewFilterLogEventsPaginator(c.svc, params)
+		for paginator.HasMorePages() {
+			if page, err := paginator.NextPage(ctx); err != nil {
+				c.error = err
+				close(eventChan)
+				return
+			} else {
+				for _, event := range page.Events {
+					if _, ok := c.eventCache.Peek(*event.EventId); !ok {
+						eventChan <- NewEvent(event, c.logGroupName)
+						c.eventCache.Add(*event.EventId, nil)
+					}
+				}
 			}
 		}
 
-		if o.NextToken != nil {
-			params.NextToken = o.NextToken
-		} else if !follow {
+		// If we are not following the logs, we are done
+		if !follow {
 			close(eventChan)
 			return
 		}
 
+		// If we are following the logs, we need to wait for new events to appear
 		time.Sleep(100 * time.Millisecond)
 	}
 }
