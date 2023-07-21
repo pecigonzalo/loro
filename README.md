@@ -12,6 +12,12 @@ Sometimes you just want to tail some logs.
 
 ## How?
 
+### Install
+Pull the latest binary:
+```
+go install github.com/pecigonzalo/loro@latest
+```
+
 ### Get logs
 
 Get logs for a streamgroup:
