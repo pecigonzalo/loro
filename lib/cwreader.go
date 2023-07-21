@@ -54,7 +54,8 @@ func NewCloudwatchLogsReader(group string, streamPrefix string, start time.Time,
 
 	svc := cloudwatchlogs.NewFromConfig(cfg)
 
-	cache, err := lru.New[string, any](MaxEventsPerCall)
+	// Twice the size of the MaxEventsPerCall to be on the safe side
+	cache, err := lru.New[string, any](MaxEventsPerCall * 2)
 	if err != nil {
 		return nil, err
 	}
@@ -219,7 +220,6 @@ func (c *CloudwatchLogsReader) StreamEvents(ctx context.Context, follow bool) <-
 }
 
 func (c *CloudwatchLogsReader) pumpEvents(ctx context.Context, eventChan chan<- Event, follow bool) {
-
 	startTime := c.start.Unix() * 1e3
 	params := &cloudwatchlogs.FilterLogEventsInput{
 		Interleaved:  aws.Bool(true),
@@ -254,8 +254,9 @@ func (c *CloudwatchLogsReader) pumpEvents(ctx context.Context, eventChan chan<- 
 				close(eventChan)
 				return
 			} else {
+				params.NextToken = page.NextToken
 				for _, event := range page.Events {
-					if _, ok := c.eventCache.Peek(*event.EventId); !ok {
+					if !c.eventCache.Contains(*event.EventId) {
 						eventChan <- NewEvent(event, c.logGroupName)
 						c.eventCache.Add(*event.EventId, nil)
 					}
