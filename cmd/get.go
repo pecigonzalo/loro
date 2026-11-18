@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"syscall"
@@ -116,7 +117,6 @@ ReadLoop:
 
 			err = output.Execute(os.Stdout, event)
 			if err != nil {
-				_, _ = fmt.Fprint(os.Stdout, err.Error())
 				return err
 			}
 
@@ -131,7 +131,7 @@ ReadLoop:
 	}
 
 	if err := logReader.Error(); err != nil {
-		if err == context.Canceled {
+		if errors.Is(err, context.Canceled) {
 			return nil
 		}
 

@@ -7,10 +7,20 @@ import (
 	"github.com/fatih/color"
 )
 
-func TestUniqueIsStableAndJoinsArgs(t *testing.T) {
-	prev := color.NoColor
+// resetColors forces colours on and isolates the package-global colour state
+// for the duration of a test.
+func resetColors(t *testing.T) {
+	t.Helper()
+	prevNoColor, prevIndex, prevUsed := color.NoColor, colorIndex, usedColors
 	color.NoColor = false
-	defer func() { color.NoColor = prev }()
+	colorIndex, usedColors = 0, map[string]int{}
+	t.Cleanup(func() {
+		color.NoColor, colorIndex, usedColors = prevNoColor, prevIndex, prevUsed
+	})
+}
+
+func TestUniqueIsStableAndJoinsArgs(t *testing.T) {
+	resetColors(t)
 
 	first := Unique("svc", "-a")
 	if again := Unique("svc", "-a"); again != first {
@@ -22,15 +32,12 @@ func TestUniqueIsStableAndJoinsArgs(t *testing.T) {
 }
 
 func TestUniqueRotatesThroughPool(t *testing.T) {
-	prev := color.NoColor
-	color.NoColor = false
-	defer func() { color.NoColor = prev }()
+	resetColors(t)
 
-	seen := map[string]bool{}
-	for _, name := range []string{"rot-1", "rot-2", "rot-3", "rot-4"} {
-		seen[Unique(name)[:5]] = true // ANSI prefix identifies the colour
-	}
-	if len(seen) != len(colorPool) {
-		t.Errorf("expected %d distinct colours across %d new inputs, got %d", len(colorPool), len(colorPool), len(seen))
+	for i, name := range []string{"rot-1", "rot-2", "rot-3", "rot-4", "rot-5"} {
+		want := colorPool[i%len(colorPool)].Sprint(name)
+		if got := Unique(name); got != want {
+			t.Errorf("Unique(%q) = %q, want %q", name, got, want)
+		}
 	}
 }
