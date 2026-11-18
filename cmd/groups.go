@@ -59,5 +59,5 @@ func groups(cmd *cobra.Command, args []string) error {
 		))
 	}
 
-	return printTable("Group\tCreation", rows)
+	return printTable(cmd.OutOrStdout(), "Group\tCreation", rows)
 }

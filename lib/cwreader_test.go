@@ -3,7 +3,7 @@ package lib
 import (
 	"context"
 	"errors"
-	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -30,27 +30,28 @@ type fakeCW struct {
 	eventInputs  []*cloudwatchlogs.FilterLogEventsInput
 }
 
-func pageIndex(token *string) int {
-	if token == nil {
-		return 0
+// page returns the page selected by token (nil means the first page) and the
+// token for the following page, or nil after the last one.
+func page[T any](pages [][]T, token *string) ([]T, *string) {
+	i := 0
+	if token != nil {
+		i, _ = strconv.Atoi(*token)
 	}
-	i, _ := strconv.Atoi(*token)
-	return i
-}
-
-func nextToken(i, n int) *string {
-	if i+1 < n {
-		return aws.String(strconv.Itoa(i + 1))
+	var next *string
+	if i+1 < len(pages) {
+		next = aws.String(strconv.Itoa(i + 1))
 	}
-	return nil
+	return pages[i], next
 }
 
 func (f *fakeCW) DescribeLogGroups(ctx context.Context, in *cloudwatchlogs.DescribeLogGroupsInput, _ ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.DescribeLogGroupsOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	if f.err != nil {
 		return nil, f.err
 	}
-	i := pageIndex(in.NextToken)
-	return &cloudwatchlogs.DescribeLogGroupsOutput{LogGroups: f.groupPages[i], NextToken: nextToken(i, len(f.groupPages))}, nil
+	groups, next := page(f.groupPages, in.NextToken)
+	return &cloudwatchlogs.DescribeLogGroupsOutput{LogGroups: groups, NextToken: next}, nil
 }
 
 func (f *fakeCW) DescribeLogStreams(ctx context.Context, in *cloudwatchlogs.DescribeLogStreamsInput, _ ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.DescribeLogStreamsOutput, error) {
@@ -60,8 +61,8 @@ func (f *fakeCW) DescribeLogStreams(ctx context.Context, in *cloudwatchlogs.Desc
 	if f.err != nil {
 		return nil, f.err
 	}
-	i := pageIndex(in.NextToken)
-	return &cloudwatchlogs.DescribeLogStreamsOutput{LogStreams: f.streamPages[i], NextToken: nextToken(i, len(f.streamPages))}, nil
+	streams, next := page(f.streamPages, in.NextToken)
+	return &cloudwatchlogs.DescribeLogStreamsOutput{LogStreams: streams, NextToken: next}, nil
 }
 
 func (f *fakeCW) FilterLogEvents(ctx context.Context, in *cloudwatchlogs.FilterLogEventsInput, _ ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.FilterLogEventsOutput, error) {
@@ -75,8 +76,8 @@ func (f *fakeCW) FilterLogEvents(ctx context.Context, in *cloudwatchlogs.FilterL
 	if f.err != nil {
 		return nil, f.err
 	}
-	i := pageIndex(in.NextToken)
-	return &cloudwatchlogs.FilterLogEventsOutput{Events: f.eventPages[i], NextToken: nextToken(i, len(f.eventPages))}, nil
+	events, next := page(f.eventPages, in.NextToken)
+	return &cloudwatchlogs.FilterLogEventsOutput{Events: events, NextToken: next}, nil
 }
 
 func newTestReader(t *testing.T, svc cloudWatchLogsAPI, group, prefix string, start, end time.Time) *CloudwatchLogsReader {
@@ -106,21 +107,10 @@ func ls(name string, created, lastIngest int64) types.LogStream {
 }
 
 func ev(id, stream, msg string) types.FilteredLogEvent {
-	return types.FilteredLogEvent{
-		EventId:       aws.String(id),
-		LogStreamName: aws.String(stream),
-		Message:       aws.String(msg),
-		Timestamp:     aws.Int64(1700000000000),
-		IngestionTime: aws.Int64(1700000000000),
-	}
-}
-
-func streamNames(streams []types.LogStream) []string {
-	names := make([]string, len(streams))
-	for i, s := range streams {
-		names[i] = *s.LogStreamName
-	}
-	return names
+	e := filteredEvent(msg)
+	e.EventId = aws.String(id)
+	e.LogStreamName = aws.String(stream)
+	return e
 }
 
 func TestListGroupsPaginates(t *testing.T) {
@@ -228,9 +218,8 @@ func TestListStreamsByTime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := fmt.Sprint(streamNames(streams))
-	if got != "[recent older]" {
-		t.Errorf("streams = %s, want [recent older]", got)
+	if got, want := streamsToNames(streams), []string{"recent", "older"}; !slices.Equal(got, want) {
+		t.Errorf("streams = %v, want %v", got, want)
 	}
 
 	in := svc.streamInputs[0]
@@ -256,8 +245,8 @@ func TestListStreamsByPrefix(t *testing.T) {
 		t.Fatal(err)
 	}
 	// results are sorted by last ingestion time, newest first
-	if got := fmt.Sprint(streamNames(streams)); got != "[web-later web-in]" {
-		t.Errorf("streams = %s", got)
+	if got, want := streamsToNames(streams), []string{"web-later", "web-in"}; !slices.Equal(got, want) {
+		t.Errorf("streams = %v, want %v", got, want)
 	}
 	if in := svc.streamInputs[0]; aws.ToString(in.LogStreamNamePrefix) != "web" || in.OrderBy != "" {
 		t.Errorf("prefix search should send the prefix and no ordering, got %+v", in)
@@ -276,8 +265,8 @@ func TestListStreamsNilIngestionTimeTreatedAsZero(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := fmt.Sprint(streamNames(streams)); got != "[with-events empty]" {
-		t.Errorf("streams = %s", got)
+	if got, want := streamsToNames(streams), []string{"with-events", "empty"}; !slices.Equal(got, want) {
+		t.Errorf("streams = %v, want %v", got, want)
 	}
 }
 
@@ -361,8 +350,8 @@ func TestStreamEventsPaginatesAndDeduplicates(t *testing.T) {
 	for _, e := range events {
 		ids = append(ids, e.ID)
 	}
-	if got := fmt.Sprint(ids); got != "[1 2 3]" {
-		t.Errorf("event ids = %s, want [1 2 3]", got)
+	if want := []string{"1", "2", "3"}; !slices.Equal(ids, want) {
+		t.Errorf("event ids = %v, want %v", ids, want)
 	}
 	if events[0].Group != "g" || events[0].Event["message"] != "one" {
 		t.Errorf("first event = %+v", events[0])
@@ -408,8 +397,8 @@ func TestStreamEventsResolvesStreamPrefix(t *testing.T) {
 	if len(events) != 1 || r.Error() != nil {
 		t.Fatalf("events=%d err=%v", len(events), r.Error())
 	}
-	if got := fmt.Sprint(svc.eventInputs[0].LogStreamNames); got != "[web-2 web-1]" {
-		t.Errorf("LogStreamNames = %s, want [web-2 web-1]", got)
+	if got, want := svc.eventInputs[0].LogStreamNames, []string{"web-2", "web-1"}; !slices.Equal(got, want) {
+		t.Errorf("LogStreamNames = %v, want %v", got, want)
 	}
 }
 
@@ -473,7 +462,7 @@ func TestStreamEventsFollowStopsOnCancel(t *testing.T) {
 
 func TestStreamsToNames(t *testing.T) {
 	got := streamsToNames([]types.LogStream{ls("a", 0, 0), ls("b", 0, 0)})
-	if fmt.Sprint(got) != "[a b]" {
+	if !slices.Equal(got, []string{"a", "b"}) {
 		t.Errorf("names = %v", got)
 	}
 }

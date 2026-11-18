@@ -85,7 +85,7 @@ func (c *CloudwatchLogsReader) ListGroups(ctx context.Context) ([]types.LogGroup
 	return getLogGroups(ctx, c.svc, c.logGroupName)
 }
 
-func getLogGroups(ctx context.Context, svc cloudWatchLogsAPI, name string) ([]types.LogGroup, error) {
+func getLogGroups(ctx context.Context, svc cloudwatchlogs.DescribeLogGroupsAPIClient, name string) ([]types.LogGroup, error) {
 	describeLogGroupsInput := &cloudwatchlogs.DescribeLogGroupsInput{
 		LogGroupNamePrefix: aws.String(name),
 	}
@@ -110,7 +110,7 @@ func (c *CloudwatchLogsReader) GetGroup(ctx context.Context) (types.LogGroup, er
 	return getLogGroup(ctx, c.svc, c.logGroupName)
 }
 
-func getLogGroup(ctx context.Context, svc cloudWatchLogsAPI, name string) (types.LogGroup, error) {
+func getLogGroup(ctx context.Context, svc cloudwatchlogs.DescribeLogGroupsAPIClient, name string) (types.LogGroup, error) {
 	groups, err := getLogGroups(ctx, svc, name)
 	if err != nil {
 		return types.LogGroup{}, err
@@ -278,7 +278,13 @@ func (c *CloudwatchLogsReader) pumpEvents(ctx context.Context, eventChan chan<- 
 		}
 
 		// If we are following the logs, we need to wait for new events to appear
-		time.Sleep(100 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			c.error = ctx.Err()
+			close(eventChan)
+			return
+		case <-time.After(100 * time.Millisecond):
+		}
 	}
 }
 

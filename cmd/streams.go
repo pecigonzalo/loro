@@ -63,5 +63,5 @@ func streams(cmd *cobra.Command, args []string) error {
 		))
 	}
 
-	return printTable("Stream\tLast Event\tCreation", rows)
+	return printTable(cmd.OutOrStdout(), "Stream\tLast Event\tCreation", rows)
 }
