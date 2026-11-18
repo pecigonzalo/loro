@@ -53,15 +53,17 @@ func groups(cmd *cobra.Command, args []string) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 8, 2, '\t', 0)
-	fmt.Fprintln(w, "Group\tCreation")
+	_, _ = fmt.Fprintln(w, "Group\tCreation")
 
 	for _, group := range groups {
-		fmt.Fprintf(w, "%s\t%s\n",
+		_, _ = fmt.Fprintf(w, "%s\t%s\n",
 			*group.LogGroupName,
 			lib.ParseAWSTimestamp(group.CreationTime).Local().Format(lib.ShortTimeFormat),
 		)
 	}
-	w.Flush()
+	if err := w.Flush(); err != nil {
+		return err
+	}
 
 	return nil
 }

@@ -1,7 +1,7 @@
 {
   description = "Loro Local Build";
 
-  inputs.nixpkgs.url = "github:nixos/nixpkgs/nixos-23.05-small";
+  inputs.nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
   inputs.flake-utils.url = "github:numtide/flake-utils";
 
   outputs = { self, nixpkgs, flake-utils }:
@@ -9,15 +9,15 @@
       let pkgs = nixpkgs.legacyPackages.${system};
       in
       {
-        devShell = pkgs.mkShell {
+        devShells.default = pkgs.mkShell {
           buildInputs = [
             pkgs.go
             pkgs.gotools
             pkgs.goreleaser
             pkgs.golangci-lint
             pkgs.gopls
-            pkgs.go-outline
-            pkgs.gopkgs
+            pkgs.pre-commit
+            pkgs.shellcheck
           ];
         };
       });

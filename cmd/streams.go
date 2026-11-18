@@ -56,16 +56,18 @@ func streams(cmd *cobra.Command, args []string) error {
 	})
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 8, 2, '\t', 0)
-	fmt.Fprintln(w, "Stream\tLast Event\tCreation")
+	_, _ = fmt.Fprintln(w, "Stream\tLast Event\tCreation")
 
 	for _, stream := range streams {
-		fmt.Fprintf(w, "%s\t%s\t%s\n",
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n",
 			*stream.LogStreamName,
 			lib.ParseAWSTimestamp(stream.LastIngestionTime).Local().Format(lib.ShortTimeFormat),
 			lib.ParseAWSTimestamp(stream.CreationTime).Local().Format(lib.ShortTimeFormat),
 		)
 	}
-	w.Flush()
+	if err := w.Flush(); err != nil {
+		return err
+	}
 
 	return nil
 }

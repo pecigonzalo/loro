@@ -116,16 +116,16 @@ ReadLoop:
 
 			err = output.Execute(os.Stdout, event)
 			if err != nil {
-				fmt.Fprint(os.Stdout, err.Error())
+				_, _ = fmt.Fprint(os.Stdout, err.Error())
 				return err
 			}
 
-			fmt.Fprintf(os.Stdout, "\n")
+			_, _ = fmt.Fprintf(os.Stdout, "\n")
 			// reset slow log warning timer
 			ticker = time.After(7 * time.Second)
 		case <-ticker:
 			if !follow {
-				fmt.Fprintf(os.Stdout, "logs are taking a while to load... possibly try a smaller time window")
+				_, _ = fmt.Fprintf(os.Stdout, "logs are taking a while to load... possibly try a smaller time window")
 			}
 		}
 	}

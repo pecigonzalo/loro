@@ -222,7 +222,6 @@ func (c *CloudwatchLogsReader) StreamEvents(ctx context.Context, follow bool) <-
 func (c *CloudwatchLogsReader) pumpEvents(ctx context.Context, eventChan chan<- Event, follow bool) {
 	startTime := c.start.Unix() * 1e3
 	params := &cloudwatchlogs.FilterLogEventsInput{
-		Interleaved:  aws.Bool(true),
 		LogGroupName: aws.String(c.logGroupName),
 		StartTime:    aws.Int64(startTime),
 	}
