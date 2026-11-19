@@ -24,11 +24,19 @@ var (
 	MaxStreams = 100
 )
 
+// cloudWatchLogsAPI is the subset of the CloudWatch Logs client used by the
+// reader. *cloudwatchlogs.Client satisfies it; tests can supply a fake.
+type cloudWatchLogsAPI interface {
+	cloudwatchlogs.DescribeLogGroupsAPIClient
+	cloudwatchlogs.DescribeLogStreamsAPIClient
+	cloudwatchlogs.FilterLogEventsAPIClient
+}
+
 // CloudwatchLogsReader is responsible for fetching logs for a particular log
 // group
 type CloudwatchLogsReader struct {
 	logGroupName string
-	svc          *cloudwatchlogs.Client
+	svc          cloudWatchLogsAPI
 	eventCache   *lru.Cache[string, any]
 	start        time.Time
 	end          time.Time
@@ -77,7 +85,7 @@ func (c *CloudwatchLogsReader) ListGroups(ctx context.Context) ([]types.LogGroup
 	return getLogGroups(ctx, c.svc, c.logGroupName)
 }
 
-func getLogGroups(ctx context.Context, svc *cloudwatchlogs.Client, name string) ([]types.LogGroup, error) {
+func getLogGroups(ctx context.Context, svc cloudwatchlogs.DescribeLogGroupsAPIClient, name string) ([]types.LogGroup, error) {
 	describeLogGroupsInput := &cloudwatchlogs.DescribeLogGroupsInput{
 		LogGroupNamePrefix: aws.String(name),
 	}
@@ -102,7 +110,7 @@ func (c *CloudwatchLogsReader) GetGroup(ctx context.Context) (types.LogGroup, er
 	return getLogGroup(ctx, c.svc, c.logGroupName)
 }
 
-func getLogGroup(ctx context.Context, svc *cloudwatchlogs.Client, name string) (types.LogGroup, error) {
+func getLogGroup(ctx context.Context, svc cloudwatchlogs.DescribeLogGroupsAPIClient, name string) (types.LogGroup, error) {
 	groups, err := getLogGroups(ctx, svc, name)
 	if err != nil {
 		return types.LogGroup{}, err
@@ -222,7 +230,6 @@ func (c *CloudwatchLogsReader) StreamEvents(ctx context.Context, follow bool) <-
 func (c *CloudwatchLogsReader) pumpEvents(ctx context.Context, eventChan chan<- Event, follow bool) {
 	startTime := c.start.Unix() * 1e3
 	params := &cloudwatchlogs.FilterLogEventsInput{
-		Interleaved:  aws.Bool(true),
 		LogGroupName: aws.String(c.logGroupName),
 		StartTime:    aws.Int64(startTime),
 	}
@@ -271,7 +278,13 @@ func (c *CloudwatchLogsReader) pumpEvents(ctx context.Context, eventChan chan<- 
 		}
 
 		// If we are following the logs, we need to wait for new events to appear
-		time.Sleep(100 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			c.error = ctx.Err()
+			close(eventChan)
+			return
+		case <-time.After(100 * time.Millisecond):
+		}
 	}
 }
 

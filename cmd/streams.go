@@ -3,11 +3,10 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"os"
 	"sort"
-	"text/tabwriter"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/pecigonzalo/loro/lib"
 	"github.com/spf13/cobra"
 )
@@ -52,20 +51,17 @@ func streams(cmd *cobra.Command, args []string) error {
 	}
 
 	sort.Slice(streams, func(i, j int) bool {
-		return *streams[i].LastIngestionTime > *streams[j].LastIngestionTime
+		return aws.ToInt64(streams[i].LastIngestionTime) > aws.ToInt64(streams[j].LastIngestionTime)
 	})
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 8, 2, '\t', 0)
-	fmt.Fprintln(w, "Stream\tLast Event\tCreation")
-
+	rows := make([]string, 0, len(streams))
 	for _, stream := range streams {
-		fmt.Fprintf(w, "%s\t%s\t%s\n",
-			*stream.LogStreamName,
+		rows = append(rows, fmt.Sprintf("%s\t%s\t%s",
+			aws.ToString(stream.LogStreamName),
 			lib.ParseAWSTimestamp(stream.LastIngestionTime).Local().Format(lib.ShortTimeFormat),
 			lib.ParseAWSTimestamp(stream.CreationTime).Local().Format(lib.ShortTimeFormat),
-		)
+		))
 	}
-	w.Flush()
 
-	return nil
+	return printTable(cmd.OutOrStdout(), "Stream\tLast Event\tCreation", rows)
 }

@@ -3,10 +3,9 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"os"
-	"text/tabwriter"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/pecigonzalo/loro/lib"
 	"github.com/spf13/cobra"
 )
@@ -52,16 +51,13 @@ func groups(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 8, 2, '\t', 0)
-	fmt.Fprintln(w, "Group\tCreation")
-
+	rows := make([]string, 0, len(groups))
 	for _, group := range groups {
-		fmt.Fprintf(w, "%s\t%s\n",
-			*group.LogGroupName,
+		rows = append(rows, fmt.Sprintf("%s\t%s",
+			aws.ToString(group.LogGroupName),
 			lib.ParseAWSTimestamp(group.CreationTime).Local().Format(lib.ShortTimeFormat),
-		)
+		))
 	}
-	w.Flush()
 
-	return nil
+	return printTable(cmd.OutOrStdout(), "Group\tCreation", rows)
 }

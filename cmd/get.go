@@ -1,9 +1,10 @@
 package cmd
 
 import (
+	"bufio"
 	"context"
+	"errors"
 	"fmt"
-	"os"
 	"syscall"
 	"text/template"
 	"time"
@@ -105,6 +106,8 @@ func get(cmd *cobra.Command, args []string) error {
 
 	eventChan := logReader.StreamEvents(ctx, follow)
 
+	out := bufio.NewWriter(cmd.OutOrStdout())
+
 	ticker := time.After(7 * time.Second)
 ReadLoop:
 	for {
@@ -114,24 +117,28 @@ ReadLoop:
 				break ReadLoop
 			}
 
-			err = output.Execute(os.Stdout, event)
-			if err != nil {
-				fmt.Fprint(os.Stdout, err.Error())
+			// Write errors (e.g. a closed pipe) are sticky in the bufio.Writer
+			// and surface here, ending the read instead of being dropped.
+			if err := output.Execute(out, event); err != nil {
 				return err
 			}
-
-			fmt.Fprintf(os.Stdout, "\n")
+			if err := out.WriteByte('\n'); err != nil {
+				return err
+			}
+			if err := out.Flush(); err != nil {
+				return err
+			}
 			// reset slow log warning timer
 			ticker = time.After(7 * time.Second)
 		case <-ticker:
 			if !follow {
-				fmt.Fprintf(os.Stdout, "logs are taking a while to load... possibly try a smaller time window")
+				cmd.PrintErrln("logs are taking a while to load... possibly try a smaller time window")
 			}
 		}
 	}
 
 	if err := logReader.Error(); err != nil {
-		if err == context.Canceled {
+		if errors.Is(err, context.Canceled) {
 			return nil
 		}
 
